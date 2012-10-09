@@ -1,5 +1,3 @@
-#include <stdio.h>
-
 /*
  * A very simple CUDA example adding two arrays of ints together.
  *
@@ -8,15 +6,19 @@
  *  - device pointers with cudaMalloc, cudaMemcpy
  *  - writing GPU kernel code (and getting threadIdx)
  *  - launching kernel
+ *  - kernel launch dimensions, threads, blocks, grid
  *
  *  Danny George 2012
  */
 
 
-// NOTE: keep this value to a low number for this example
-//  due to block dimension limitations and the way this
-//  example was written. (I received failure with > 1024)
-const int N = 512;
+#include <stdio.h>
+
+void do_the_add(int *a, int *b, int *r, int i);
+
+
+
+const int N = 512 * 1024;
 
 
 // initialize an array with a counting sequence
@@ -45,18 +47,36 @@ void fill_array_const(int *arr, const size_t n, const int val)
 __global__
 void vector_add(int *a, int *b, int *r, const size_t n)
 {
-    int tid = threadIdx.x;
+    // convert from 2D launch to 1D array index
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
     if (tid >= N)
         return;
 
     r[tid] = a[tid] + b[tid];
+
+    // you can call __device__ functions from __global__ functions
+    //do_the_add(a, b, r, tid);
 }
+
+
+
+// __device__ tells the compiler this function is called by the device and runs on the device
+// __host__   tells the compiler to make another version to run on the host (normal function)
+__device__ __host__
+void do_the_add(int *a, int *b, int *r, int i)
+{
+    r[i] = a[i] + b[i];
+}
+
+
 
 
 int main(int argc, char const *argv[])
 {
-    int host_a[N];
-    int host_b[N];
+    int *host_a;
+    int *host_b;
+    int *host_r;
 
     int *dev_a;
     int *dev_b;
@@ -64,6 +84,15 @@ int main(int argc, char const *argv[])
 
     // NOTE: this example does no error checking!
     cudaError_t err;
+
+    // ---- ALLOCATE MEMORY ON HOST -----------
+    host_a = (int *)malloc(sizeof(int) * N);
+    host_b = (int *)malloc(sizeof(int) * N);
+    host_r = (int *)malloc(sizeof(int) * N);
+    if (host_a == NULL || host_b == NULL || host_r == NULL) {
+        fprintf(stderr, "malloc error on host\n");
+        exit(1);
+    }
 
     // ---- ALLOCATE MEMORY ON DEVICE ---------
     // cudaMalloc(void **dev_ptr, size_t count)
@@ -81,25 +110,31 @@ int main(int argc, char const *argv[])
     err = cudaMemcpy(dev_b, host_b, sizeof(int) * N, cudaMemcpyHostToDevice);
 
     // ---- PERFORM COMPUTATION ON DEVICE -----
-    vector_add<<<128, N/128>>>(dev_a, dev_b, dev_r, N);
+    int threads_per_block = 128;
+    int blocks_per_grid = ((N + threads_per_block - 1) / threads_per_block);    // integer div, ensures at least 1 block
+    vector_add<<<blocks_per_grid, threads_per_block>>>(dev_a, dev_b, dev_r, N);
     // the <<<dim3 gridDim, dim3 blockDim>>> is a CUDA extension to launch kernels
     //      grids are made up of blocks
     //      blocks are made up of threads
-    // this example only launches 1 block (gridDim of (1, 0, 0)), and N threads (blockDim of (N, 0, 0))
 
     // ---- COPY RESULT DATA BACK TO HOST ----
-    int host_r[N];
     err = cudaMemcpy(host_r, dev_r, sizeof(int) * N, cudaMemcpyDeviceToHost);
 
     // verify results
     bool success = true;
     for (size_t i=0; i<N; ++i) {
         if (host_r[i] != host_a[i] + host_b[i]) {
-            fprintf(stderr, "ERROR (%u): %d != %d + %d", i, host_r[i], host_a[i], host_b[i]);
+            fprintf(stderr, "ERROR [index %u]: %d != %d + %d", i, host_r[i], host_a[i], host_b[i]);
             success = false;
             break;
         }
     }
+
+    // ---- CLEANUP -------------------------
+    // free memory on host
+    free(host_a);
+    free(host_b);
+    free(host_r);
 
     // free memory on device
     err = cudaFree(dev_a);

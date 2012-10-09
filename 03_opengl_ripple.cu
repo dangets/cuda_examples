@@ -26,7 +26,7 @@
 #include "cuda_gl_interop.h"
 
 
-#define DIM     1024     // keep as power of 2 above 16
+#define DIM     512     // keep as power of 2 above 16
 
 
 static void HandleError( cudaError_t err, const char *file, int line )

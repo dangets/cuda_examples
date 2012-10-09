@@ -180,7 +180,6 @@ int main(int argc, char const *argv[])
 
     // ... verify results omitted ...
 
-
     free(host_a);
     free(host_b);
     free(host_r);

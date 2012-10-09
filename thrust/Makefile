@@ -6,21 +6,19 @@
 	nvcc -o $@  $^ $(CFLAGS) $(LDFLAGS)
 
 
-BINS = 01_vector_add 02_vector_add_2 03_opengl_ripple
+BINS = 01_intro 02_vector_add 03_functors
 
 
 .PHONY: all
 all: $(BINS)
 
 
-02_vector_add_2: 02_vector_add_2.cu CUDATimer.o
-
-03_opengl_ripple: LDFLAGS = -lGL -lglut
-
+03_functors: 03_functors.cu CUDATimer.o
 
 
 .PHONY: clean
 clean:
 	rm -f *.o
 	rm -f $(BINS)
+
 
